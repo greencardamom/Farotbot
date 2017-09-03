@@ -1,17 +1,10 @@
 FA RotBot
 
-Featured Article Link Rot Bot (FA RotBot) is a bot that helps with Link Rot in Featured 
-Articles and Lists. FA RotBot creates a list of articles from 'Category:Featured articles' and 
-'Category:Featured lists'. It then sends this list to 'User:InternetArchiveBot' (IABot) for 
-processing via the IABot API. FA RotBot does not make edits itself. FA RotBot runs 
-automatically on a regular time schedule via cron.
-
-The bot contains three GNU Awk programs, each are standalone command-line driven utilities. wikiget.awk is a generic tool for accessing various MediaWiki API functions, including the "-c" option for category lists used in this application. iabget.awk is a standalone utility for accessing the IABot API, including the "submitbotjob" function. farotbot.awk is the bot itself which calls the other two programs.
-
-
 Setup for 'FA RotBot'
 ======================
-The setup instructions assume mirroring the same setup as the bot was made originally. If using a different name from 'FA RobtBot' change in locations as needed.
+
+The setup instructions assume mirroring the same setup as the bot was made originally. If using 
+a different name from 'FA RobtBot' change in locations as needed.
 
 Install GNU Awk 4.1 or later
 Install PHP 5.5.9 or later
@@ -50,12 +43,13 @@ Install jq 1.4 or later
      . Change the first hash-bang line to the location of GNU Awk 
      . Change the paths for the Exe["program"]'s listed.
      . Change the Home directory, email, etc.. to customize
+     . Setting 'TestingLimit = 2' is recommended for initial testing 
 10. Run 'crontab -e'
       55 * * * *   /usr/bin/jsub -N cron-tools.farotbot-1 -once /data/project/farotbot/bin/farotbot.awk
     This will run the program once an hour at 55 minutes after. Configure as needed.
-    Setting 'TestingLimit = 2' is recommended for initial testing 
 
 Operation
 ===========
 
-Each time the bot runs it generates data files in the data subdirectory and an index in the meta directory. These are logs basically and not essentially for the bot to run.
+Each time the bot runs it generates data files in the data subdirectory and an index in the 
+meta directory. These are logs basically and not essential for the bot to run.

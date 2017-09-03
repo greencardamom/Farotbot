@@ -1,6 +1,14 @@
-Featured Article Link Rot Bot (FA RotBot) is a bot that helps with Link Rot in Featured Articles and Lists on Wikipedia. FA RotBot creates a list of articles from 'Category:Featured articles' and 'Category:Featured lists'. It then sends this list to 'User:InternetArchiveBot' (IABot) for processing via the IABot API. FA RotBot does not make edits itself. FA RotBot runs automatically on a regular time schedule via cron.
+Featured Article Link Rot Bot (FA RotBot) is a bot that helps with Link Rot in Featured 
+Articles and Lists on Wikipedia. FA RotBot creates a list of articles from 'Category:Featured 
+articles' and 'Category:Featured lists'. It then sends this list to 'User:InternetArchiveBot' 
+(IABot) for processing via the IABot API. FA RotBot does not make edits itself. FA RotBot runs 
+automatically on a regular time schedule via cron.
 
-The bot contains three GNU Awk programs, each are standalone command-line utilities. wikiget.awk is a generic tool for accessing various MediaWiki API functions, including the "-c" option for category lists used in this application. iabget.awk is a standalone utility for accessing the IABot API, including the "submitbotjob" function. farotbot.awk is the bot itself which calls the other two programs.
+The bot contains three GNU Awk programs, each are standalone command-line utilities. 
+wikiget.awk is a generic tool for accessing various MediaWiki API functions, including the "-c" 
+option for category lists used in this application. iabget.awk is a standalone utility for 
+accessing the IABot API, including the "submitbotjob" function. farotbot.awk is the bot itself 
+which calls the other two programs.
 
 For installation see 0INSTALL.TXT
 
