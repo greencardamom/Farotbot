@@ -27,7 +27,7 @@
 
 BEGIN {
 
-  Email           = "dfgf56greencard93@nym.hush.com"   # For notifying of errors
+  Email           = ""                                 # For notifying of errors
   Home            = "/data/project/farotbot/"          # Home directory of farotbot.awk with trailing slash
   BinDir          = Home "bin/"
   DataDir         = Home "data/"
@@ -51,15 +51,15 @@ BEGIN {
   Exe["wikiget"] = BinDir "wikiget.awk"
   Exe["iabget"] = BinDir "iabget.awk"
 
-  IGNORECASE = 1     # All regex will be case insenstive
-  StdOut = 1         # Error messages to stdout (1) or stderr (0)
+  IGNORECASE = 1      # All regex will be case insenstive
+  StdOut = 1          # Error messages to stdout (1) or stderr (0)
 
   TestingLimit = 25   # Max number of articles to process. Set to 0 to disable (ie. all articles)
 
-  delete ExcludeA    # Create associative arrays to hold excluded and included article titles
+  delete ExcludeA     # Create associative arrays to hold excluded and included article titles
   delete IncludeA    
 
-  delete MasterList  # Create associative array master list of articles
+  delete MasterList   # Create associative array master list of articles
 
   main()
 
