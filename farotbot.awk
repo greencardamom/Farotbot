@@ -22,12 +22,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-
 @load "filefuncs"
 
 BEGIN {
 
-  Email           = ""                                 # For notifying of errors
+  Email           = ""                                 # For notifying of errors. Set blank to disable send.
   Home            = "/data/project/farotbot/"          # Home directory of farotbot.awk with trailing slash
   BinDir          = Home "bin/"
   DataDir         = Home "data/"
@@ -37,29 +36,30 @@ BEGIN {
   ExcludeListPage = "User:FA RotBot/exclude"
   IncludeListPage = "User:FA RotBot/include"
   Cats[1]         = "Category:Featured articles"       # Categories to process. Add any more here
-  Cats[2]         = "Category:Featured lists"          
+  Cats[2]         = "Category:Featured lists"
 
-  Exe["wget"] = "/usr/bin/wget"
-  Exe["timeout"] = "/usr/bin/timeout"
-  Exe["rm"] = "/bin/rm"
-  Exe["sleep"] = "/bin/sleep"
-  Exe["date"] = "/bin/date"
-  Exe["mkdir"] = "/bin/mkdir"
-  Exe["gzip"] = "/bin/gzip"
-  Exe["mailx"] = "/usr/bin/mailx"
-  
-  Exe["wikiget"] = BinDir "wikiget.awk"
-  Exe["iabget"] = BinDir "iabget.awk"
+  Exe["wget"]     = "/usr/bin/wget"
+  Exe["timeout"]  = "/usr/bin/timeout"
+  Exe["rm"]       = "/bin/rm"
+  Exe["sleep"]    = "/bin/sleep"
+  Exe["date"]     = "/bin/date"
+  Exe["mkdir"]    = "/bin/mkdir"
+  Exe["gzip"]     = "/bin/gzip"
+  Exe["tail"]     = "/usr/bin/tail"
+  Exe["mailx"]    = "/usr/bin/mailx"
 
-  IGNORECASE = 1      # All regex will be case insenstive
-  StdOut = 1          # Error messages to stdout (1) or stderr (0)
+  Exe["wikiget"]  = BinDir "wikiget.awk"
+  Exe["iabget"]   = BinDir "iabget.awk"
 
-  TestingLimit = 25   # Max number of articles to process. Set to 0 to disable (ie. all articles)
+  IGNORECASE      = 1         # All regex will be case insenstive
+  StdOut          = 1         # Error messages to stdout (1) or stderr (0)
 
-  delete ExcludeA     # Create associative arrays to hold excluded and included article titles
-  delete IncludeA    
+  TestingLimit    = 1         # Max number of articles to process. Set to 0 to disable (ie. process all articles)
 
-  delete MasterList   # Create associative array master list of articles
+  delete ExcludeA             # Create associative arrays to hold excluded and included article titles
+  delete IncludeA
+
+  delete MasterList           # Create associative array master list of articles
 
   main()
 
@@ -69,15 +69,24 @@ function main(  k, id) {
 
   if(stopbutton() == "RUN") {
 
+
+   # Check last run is 'complete'
+
+    if(! jobcompleted()) {
+      stdErrO("farotbot.awk: unable to run due to last job still active")
+      exit
+    }
+
    # Create data directory for logging
 
     id = sys2var( Exe["date"] " +\"%m%d%H%M%S\"") substr(sys2var( Exe["date"] " +\"%N\""), 1, 5)
     rb_data = DataDir "rb-" id "/"
     if(!mkdir(rb_data)) {
+      email("NOTICE: Error in farotbot: unable to create temp dir.")
       stdErrO("farotbot.awk: unable to create temp dir " rb_data)
-      exit            
-    }         
-   
+      exit
+    }
+
    # Get data from wiki into MasterList[]
 
     if(getlist("exclude") == 0) {
@@ -91,12 +100,12 @@ function main(  k, id) {
     if(getcats() == 0) {
       stdErrO("farotbot.awk: exiting due to unable to error getting categories")
       exit
-    } 
+    }
 
    # Add/subtract articles from MasterList
 
     includearticles()
-    excludearticles() 
+    excludearticles()
 
    # Save raw postfile data from MasterList
 
@@ -129,18 +138,18 @@ function iabot(   command,op,a,dest) {
       close(MetaDir "index")
     }
     else {
-      sys2var(Exe["mailx"] " -s \"NOTICE: Error in FARotBot unable to run IABot (1)\" " Email " < " rb_data "json")
+      email("NOTICE: Error in FARotBot unable to run IABot (1)", rb_data "json")
       stdErrO("farotbot.awk: Error running IABot.")
     }
   }
   else {
-    sys2var(Exe["mailx"] " -s \"NOTICE: Error in FARotBot unable to run IABot (2)\" " Email " < " rb_data "json")
+    email("NOTICE: Error in FARotBot unable to run IABot (2)", rb_data "json")
     stdErrO("farotbot.awk: Error running IABot.")
   }
 }
 
 #
-# Add IncludeA[] to MasterList[] 
+# Add IncludeA[] to MasterList[]
 #
 function includearticles(  i) {
 
@@ -156,7 +165,7 @@ function excludearticles(  i,j) {
 
   for(i in MasterList) {
     for(j in ExcludeA) {
-      if(strip(i) == strip(j) ) 
+      if(strip(i) == strip(j) )
         delete MasterList[i]
     }
   }
@@ -168,15 +177,16 @@ function excludearticles(  i,j) {
 function getcats(  command,o,u,i,a,j,k) {
 
   for(i in Cats) {
-    command = Exe["wikiget"] " -c " shquote(Cats[i]) " -n " shquote(Lang) 
+    command = Exe["wikiget"] " -c " shquote(Cats[i]) " -n " shquote(Lang)
     o = o "\n" sys2var(command)
   }
   u = uniq(o)
   if( empty(strip(u))) {
+    email("NOTICE: Error in farotbot: uniq returned empty result. Max lag exceeded?")
     stdErrO("farotbot.awk: uniq returned empty result. Max lag exceeded?")
     return 0
   }
- 
+
  # Copy into MasterList
   if(split(u, a, "\n") > 0) {
     for(j in a) {
@@ -194,7 +204,7 @@ function getcats(  command,o,u,i,a,j,k) {
   close(rb_data "wikiget")
   sys2var(Exe["gzip"] " " rb_data "wikiget")
 
-  return 1  
+  return 1
 
 }
 
@@ -219,20 +229,20 @@ function getlist(list,  listdata,command,a,c,i,msg,page,k) {
   listdata = sys2var(command)
   if(length(listdata) < 2) {
     stdErrO(msg " try 2 - ", "n")
-    sleep(2)       
+    sleep(2)
     listdata = sys2var(command)
   }
   if(length(listdata) < 2) {
     stdErrO(msg " try 3 - ", "n")
-    sleep(20)       
+    sleep(20)
     listdata = sys2var(command)
   }
   if(length(listdata) < 2) {
     stdErrO(msg " try 4 - ", "n")
-    sleep(60)       
+    sleep(60)
     listdata = sys2var(command)
   }
-  if(length(listdata) < 2) 
+  if(length(listdata) < 2)
     return 0
 
   c = split(listdata, a, "\n")
@@ -249,12 +259,41 @@ function getlist(list,  listdata,command,a,c,i,msg,page,k) {
 
  # Save copy for history
 
-  if(list == "exclude") 
+  if(list == "exclude")
     history( ExcludeA, "listexclude")
-  if(list == "include") 
+  if(list == "include")
     history( IncludeA, "listinclude")
 
   return 1
+}
+
+#
+# Check last job has completed
+#  Return 1 if completed
+#
+function jobcompleted(  command,a,msg) {
+
+  command = Exe["tail"] " -n 1 " MetaDir "index"
+  if(split(sys2var(command), a, "|") == 2) {
+    a[1] = strip(a[1])
+    if(! empty(a[1])) {
+      command = Exe["iabget"] " -a getbotjob -p \"id=" a[1] "\""
+      if(sys2var(command) == "complete")
+        return 1
+      else
+        msg = "NOTICE: Error in FARotBot: jobcompleted() (1)"
+    }
+    else
+      msg = "NOTICE: Error in FARotBot: jobcompleted() (2)"
+  }
+  else
+    msg = "NOTICE: Error in FARotBot: jobcompleted() (3)"
+
+  if(empty(msg))
+    msg = "NOTICE: Error in FARotBot: jobcompleted() (4)"
+  email(msg)
+  return 0
+
 }
 
 #
@@ -262,7 +301,7 @@ function getlist(list,  listdata,command,a,c,i,msg,page,k) {
 #
 #  return RUN or STOP
 #
-function stopbutton(  button,command) {          
+function stopbutton(  button,command) {
 
   command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://en.wikipedia.org/w/index.php?title=" StopButtonPage "&action=raw\""
   button = sys2var(command)
@@ -272,7 +311,7 @@ function stopbutton(  button,command) {
 
   if(length(button) < 2) {
     stdErrO("Button try 2 - ", "n")
-    sleep(2)       
+    sleep(2)
     button = sys2var(command)
   }
   if(length(button) < 2) {
@@ -284,13 +323,14 @@ function stopbutton(  button,command) {
     stdErrO("Button try 4 - ", "n")
     sleep(60)
     button = sys2var(command)
-  }                  
+  }
   if(length(button) < 2) {
     stdErrO("Button try 5 - ", "n")
     sleep(240)
     button = sys2var(command)
   }
   if(length(button) < 2) {
+    email("NOTICE: Error in farotbot: Aborted Button (page blank? wikipedia down?")
     stdErrO("Aborted Button (page blank? wikipedia down?) - ", "n")
     return "RUN"
   }
@@ -298,8 +338,9 @@ function stopbutton(  button,command) {
   if(button ~ /action[ ]{0,}[=][ ]{0,}run/)
     return "RUN"
 
+  email("NOTICE: Error in farotbot: ABORTED by stop button page.")
   stdErrO("farotbot.awk: ABORTED by stop button page.")
-  return "STOP"      
+  return "STOP"
 
 }
 
@@ -308,44 +349,21 @@ function stopbutton(  button,command) {
 #
 function history(listarray, listname, opt,    k) {
 
-    for(k in listarray) 
+    for(k in listarray)
       print k >> rb_data listname
     close(rb_data listname)
     if(empty(opt))
       sys2var(Exe["gzip"] " " rb_data listname)
 }
 
-#
-# Uniq a list of \n separated names
-#
-function uniq(names,    b,c,i,x) {                
-
-        c = split(names, b, "\n")
-        names = "" # free memory
-        while (i++ < c) {     
-            gsub(/\\["]/,"\"",b[i])
-            if(b[i] ~ "for API usage") { # Max lag exceeded.                  
-                # errormsg("\nMax lag (" G["maxlag"] ") exceeded - aborting. Try again when API servers are less busy, or increase Maxlag (-m)")
-                # exit         
-                return "" 
-            }
-            if(b[i] == "")
-                continue              
-            if(x[b[i]] == "")
-                x[b[i]] = b[i]  
-        }
-        delete b # free memory    
-        return join2(x,"\n")
-
-}
 
 # [____________________ UTILITIES ________________________________________________________________]
 
-# 
-# Run a system command and store result in a variable     
+#
+# Run a system command and store result in a variable
 #   eg. googlepage = sys2var("wget -q -O- http://google.com")
-# Supports pipes inside command string. Stderr is sent to null.             
-# If command fails (errno) return null               
+# Supports pipes inside command string. Stderr is sent to null.
+# If command fails (errno) return null
 #
 function sys2var(command        ,fish, scale, ship) {
 
@@ -367,7 +385,7 @@ function sys2var(command        ,fish, scale, ship) {
 function sys2varPipe(data, command,   fish, scale, ship) {
 
          print data |& command
-         close(command, "to")   
+         close(command, "to")
 
          while ( (command |& getline fish) > 0 ) {
              if ( ++scale == 1 )
@@ -388,7 +406,7 @@ function urlencodeawk(str,  c, len, res, i, ord) {
 
         for (i = 0; i <= 255; i++)
                 ord[sprintf("%c", i)] = i
-        len = length(str)             
+        len = length(str)
         res = ""
         for (i = 1; i <= len; i++) {
                 c = substr(str, i, 1);
@@ -400,26 +418,26 @@ function urlencodeawk(str,  c, len, res, i, ord) {
         return res
 }
 
-#  
-# Strip leading/trailing whitespace                 
+#
+# Strip leading/trailing whitespace
 #
 function strip(str, opt) {
        return gensub(/^[[:space:]]+|[[:space:]]+$/,"","g",str)
 }
 
 #
-# Return 0 if string is 0-length      
+# Return 0 if string is 0-length
 #
-function empty(s) {                
+function empty(s) {
   if(length(s) == 0)
     return 1
   return 0
-}                 
+}
 
 # A helper function to subs()
 function insert_subs(str,spos,len,newstr) {
         return substr(str,1,spos-1) newstr substr(str,spos+len)
-}  
+}
 
 # subs is like sub, except that no regular expression handling is done
 function subs(pat,rep,str,        t) {
@@ -431,24 +449,24 @@ function subs(pat,rep,str,        t) {
           return str
         }
 #       return (t = index(str,pat)) ? insert_subs(str,t,length(pat),rep) : str
-}                                  
+}
 
 # gsubs is like gsub, except that no regular expression handling is done
 function gsubs(pat,rep,str) {
         while( countsubstring(str,pat) > 0) {
           str = subs(pat,rep,str)
         }
-        return str        
+        return str
 }
 
-# 
+#
 # countsubstring
 #   Returns number of occurances of pattern in str.
 #   Pattern treated as a literal string, regex char safe
-# 
+#
 #   Example: print countsubstring("[do&d?run*d!run>run*", "run*")
 #            2
-# 
+#
 #   To count substring using regex use gsub ie. total += gsub("[.]","",str)
 #
 function countsubstring(str, pat,    len, i, c) {
@@ -463,7 +481,7 @@ function countsubstring(str, pat,    len, i, c) {
   return c
 }
 
-# 
+#
 # Merge an array of strings into a single string. Array indice are strings.
 #
 function join2(arr, sep         ,i,lobster) {
@@ -485,9 +503,9 @@ function join2(arr, sep         ,i,lobster) {
 #
 function shquote(str,  safe) {
         safe = str
-        gsub(/'/, "'\\''", safe)  
+        gsub(/'/, "'\\''", safe)
         gsub(/’/, "'\\’'", safe)
-        return "'" safe "'"         
+        return "'" safe "'"
 }
 
 #
@@ -499,15 +517,15 @@ function removefile(str) {
         sys2var( Exe["rm"] " -- " shquote(str) )
       if( exists(str) ) {
         prnt("Error: unable to delete " str ", aborting.")
-        exit          
-      }              
+        exit
+      }
       system("") # Flush buffer
-}      
+}
 
 
 #
-# Check for file existence. Return 1 if exists, 0 otherwise.                  
-#  Requires GNU Awk: @load "filefuncs"               
+# Check for file existence. Return 1 if exists, 0 otherwise.
+#  Requires GNU Awk: @load "filefuncs"
 #
 function exists(name    ,fd) {
     if ( stat(name, fd) == -1)
@@ -518,15 +536,15 @@ function exists(name    ,fd) {
 
 #
 # Print to /dev/stderr
-#  if flag = "n" then no newline                     
+#  if flag = "n" then no newline
 #
 function stdErr(s, flag) {
   if(flag == "n")
     printf("%s",s) > "/dev/stderr"
-  else  
+  else
     printf("%s\n",s) > "/dev/stderr"
   close("/dev/stderr")
-}              
+}
 
 function stdErrO(s) {
   if(stdOut == 1)
@@ -535,7 +553,7 @@ function stdErrO(s) {
     stdErr(s)
 }
 
-# 
+#
 # Sleep
 #
 function sleep(seconds) {
@@ -543,8 +561,8 @@ function sleep(seconds) {
     sys2var( Exe["sleep"] " " seconds)
 }
 
-# 
-# Make a directory ("mkdir -p dir")                  
+#
+# Make a directory ("mkdir -p dir")
 #
 function mkdir(dir,    ret, var, cwd, command) {
 
@@ -559,14 +577,14 @@ function mkdir(dir,    ret, var, cwd, command) {
   ret  = chdir(cwd)
   if (ret < 0) {
     stdErrO(sprintf("Could not chdir to %s (%s)\n", cwd, ERRNO))
-    return 0              
+    return 0
   }
   return 1
 }
 
 
-# 
-# Verify any argument has valid value                
+#
+# Verify any argument has valid value
 #
 function verifyval(val) {
   if(val == "" || substr(val,1,1) ~/^[-]/) {
@@ -574,7 +592,43 @@ function verifyval(val) {
     exit
   }
   return val
-}              
+}
 
 
+#
+# Send an email, if an address is set
+#
+function email(subject, body) {
+
+    if(empty(Email)) return
+
+    if(! empty(body))
+      sys2var(Exe["mailx"] " -s \"" subject "\" " Email " < " body)
+    else
+      sys2var(Exe["mailx"] " -s \"" subject "\" " Email " < /dev/null")
+
+}
+
+#
+# Uniq a list of \n separated names
+#
+function uniq(names,    b,c,i,x) {
+
+        c = split(names, b, "\n")
+        names = "" # free memory
+        while (i++ < c) {
+            gsub(/\\["]/,"\"",b[i])
+            if(b[i] ~ "for API usage") { # Max lag exceeded.
+                # errormsg("\nMax lag (" G["maxlag"] ") exceeded - aborting. Try again when API servers are less busy, or increase Maxlag (-m)")
+                # exit
+                return ""
+            }
+            if(b[i] == "")
+                continue
+            if(x[b[i]] == "")
+                x[b[i]] = b[i]
+        }
+        delete b # free memory
+        return join2(x,"\n")
+}
 
