@@ -214,7 +214,7 @@ function getcats(  command,o,u,i,a,j,k) {
 #   Note: it's good to have the existing wiki pages with instructions, even if no articles are listed, to avoid timeouts.
 #   The format of the pages: each article is listed with '*' as the first character of the line. Anything else is ignored as a comment.
 #
-function getlist(list,  listdata,command,a,c,i,msg,page,k) {
+function getlist(list,  listdata,command,a,c,i,msg,page,k,j,listtry) {
 
   if(list == "exclude") {
     page = ExcludeListPage
@@ -227,20 +227,18 @@ function getlist(list,  listdata,command,a,c,i,msg,page,k) {
 
   command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://" Lang ".wikipedia.org/w/index.php?title=" page "&action=raw\""
   listdata = sys2var(command)
-  if(length(listdata) < 2) {
-    stdErrO(msg " try 2 - ", "n")
-    sleep(2)
-    listdata = sys2var(command)
-  }
-  if(length(listdata) < 2) {
-    stdErrO(msg " try 3 - ", "n")
-    sleep(20)
-    listdata = sys2var(command)
-  }
-  if(length(listdata) < 2) {
-    stdErrO(msg " try 4 - ", "n")
-    sleep(60)
-    listdata = sys2var(command)
+
+  listtry[2] = 2
+  listtry[3] = 20
+  listtry[4] = 60
+  for(j in listtry) {
+    if(length(listdata) < 2) {
+      stdErrO(msg " try " j " - ", "n")
+      sleep(listtry[j])
+      listdata = sys2var(command)
+    }
+    else
+      break
   }
   if(length(listdata) < 2)
     return 0
@@ -271,27 +269,33 @@ function getlist(list,  listdata,command,a,c,i,msg,page,k) {
 # Check last job has completed
 #  Return 1 if completed
 #
-function jobcompleted(  command,a,msg) {
+function jobcompleted(  command,a,msg,json,op) {
 
   command = Exe["tail"] " -n 1 " MetaDir "index"
   if(split(sys2var(command), a, "|") == 2) {
-    a[1] = strip(a[1])
+    a[1] = strip(a[1]); a[2] = strip(a[2])
     if(! empty(a[1])) {
       command = Exe["iabget"] " -a getbotjob -p \"id=" a[1] "\""
-      if(sys2var(command) == "complete")
+      op = sys2var(command)
+      if(op == "complete") {
+        command =  Exe["iabget"] " -a getbotjob -p \"id=" a[1] "\" -w"
+        json = sys2var(command)
+        print json >> a[2] "json.completed"
+        close(a[2] "json.completed")
         return 1
+      }
       else
-        msg = "NOTICE: Error in FARotBot: jobcompleted() (1)"
+        msg = op
     }
     else
-      msg = "NOTICE: Error in FARotBot: jobcompleted() (2)"
+      msg = "no id"
   }
   else
-    msg = "NOTICE: Error in FARotBot: jobcompleted() (3)"
+    msg = "no index"
 
   if(empty(msg))
-    msg = "NOTICE: Error in FARotBot: jobcompleted() (4)"
-  email(msg)
+    msg = "unknown error"
+  email("NOTICE: Error in FARotBot: jobcompleted() (" msg ")")
   return 0
 
 }
@@ -301,38 +305,33 @@ function jobcompleted(  command,a,msg) {
 #
 #  return RUN or STOP
 #
-function stopbutton(  button,command) {
+function stopbutton(  button,command,i,buttry) {
 
-  command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://en.wikipedia.org/w/index.php?title=" StopButtonPage "&action=raw\""
+  command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://en.wikipedia.org/w/index.php?title=$
   button = sys2var(command)
 
   if(button ~ /action[ ]{0,}[=][ ]{0,}run/)
     return "RUN"
 
-  if(length(button) < 2) {
-    stdErrO("Button try 2 - ", "n")
-    sleep(2)
-    button = sys2var(command)
+  buttry[2] = 2
+  buttry[3] = 20
+  buttry[4] = 60
+  buttry[5] = 240
+
+  for(i in buttry) {
+    if(length(button) < 2) {
+      stdErrO("Button try " i " - ", "n")
+      sleep(buttry[i])
+      button = sys2var(command)
+    }
+    else
+      break
   }
-  if(length(button) < 2) {
-    stdErrO("Button try 3 - ", "n")
-    sleep(20)
-    button = sys2var(command)
-  }
-  if(length(button) < 2) {
-    stdErrO("Button try 4 - ", "n")
-    sleep(60)
-    button = sys2var(command)
-  }
-  if(length(button) < 2) {
-    stdErrO("Button try 5 - ", "n")
-    sleep(240)
-    button = sys2var(command)
-  }
+
   if(length(button) < 2) {
     email("NOTICE: Error in farotbot: Aborted Button (page blank? wikipedia down?")
     stdErrO("Aborted Button (page blank? wikipedia down?) - ", "n")
-    return "RUN"
+    return "STOP"
   }
 
   if(button ~ /action[ ]{0,}[=][ ]{0,}run/)
