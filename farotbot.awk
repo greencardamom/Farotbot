@@ -307,7 +307,7 @@ function jobcompleted(  command,a,msg,json,op) {
 #
 function stopbutton(  button,command,i,buttry) {
 
-  command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://en.wikipedia.org/w/index.php?title=$
+  command = Exe["timeout"] " 20s " Exe["wget"]  " -q -O- \"https://en.wikipedia.org/w/index.php?title=" StopButtonPage "&action=raw\""
   button = sys2var(command)
 
   if(button ~ /action[ ]{0,}[=][ ]{0,}run/)
