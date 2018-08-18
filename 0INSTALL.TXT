@@ -53,3 +53,5 @@ Operation
 
 Each time the bot runs it generates data files in the data subdirectory and an index in the 
 meta directory. These are logs basically and not essential for the bot to run.
+
+If it generates a jobcompleted error, clear (ie. delete) the data directory and index file entry for the prior run and/or the run that isn't working, and try again.

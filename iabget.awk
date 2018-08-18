@@ -2,7 +2,7 @@
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2017 by User:Green Cardamom (at en.wikipedia.org)
+# Copyright (c) 2017-2018 by User:GreenC (at en.wikipedia.org)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,12 +18,10 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,         
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-@include "getopt.awk"
-@include "readfile"
 @load "filefuncs"
 
 BEGIN {
@@ -43,6 +41,7 @@ BEGIN {
   Exe["rm"] = "/bin/rm"
   Exe["awk"] = "/data/project/farotbot/local/bin/gawk"
   Exe["php"] = "/usr/bin/php"
+  Exe["sleep"] = "/bin/sleep"
 
   # Default wiki language
 
@@ -52,19 +51,19 @@ BEGIN {
 
   debug = 0
 
-  # Setup OAuth Secrets and Keys 
+  # Setup OAuth Secrets and Keys
   #
   #  Login to https://meta.wikimedia.org with the userid the script will be using
   #  If the userid is new and doesn't have Confirmed user permissions, apply for it in two places:
-  #    enwiki: Wikipedia:Requests for permissions/Confirmed 
+  #    enwiki: Wikipedia:Requests for permissions/Confirmed
   #    meta  : https://meta.wikimedia.org/wiki/Steward_requests/Miscellaneous
   #  Apply for a OAuth consumer owner-only registration:
   #    https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration/propose
   #     . Check the box "This consumer is for use only by.."
-  #     . IP Ranges and Public RSA Key should be left empty 
+  #     . IP Ranges and Public RSA Key should be left empty
   #  Add the provided Keys and Secrets below
 
-  # Oauth Keys and Secrets 
+  # For User:FA RotBot
   consumerKey = ""
   consumerSecret = ""
   accessKey = ""
@@ -77,20 +76,22 @@ BEGIN {
  # SETUP END
 
   IGNORECASE = 1
-  TIMEOUT = Exe["timeout"] " 40s " 
-  Exe["phpGenerateHeader"] = Exe["php"] " " Home "MWOAuthGenerateHeader.php"
-  Exe["phpDecodePayload"]  = Exe["php"] " " Home "MWOAuthDecodePayload.php"
+  TIMEOUT = Exe["timeout"] " 40s "
 
   cookiejar = Home "cookieiabget"
   # cookiejar = "/tmp/cookiejar"
   if(!exists(cookiejar))
     cookieopt = " --save-cookies=\"" cookiejar "\""
-  else 
+  else
     cookieopt = " --save-cookies=\"" cookiejar "\" --load-cookies=\"" cookiejar "\""
-  
+
   # Default wget options (include lead/trail spaces)
 
   Wget_opts = cookieopt " --ignore-length --user-agent=\"" Agent "\" --no-check-certificate --tries=5 --timeout=120 --waitretry=60 --retry-connrefused "
+
+  # getopt() initialization
+
+  Optind = Opterr = 1
 
   main()
 
@@ -100,16 +101,16 @@ function main() {
 
   while ((C = getopt(ARGC, ARGV, "wehd:r:a:l:p:o:f:j:")) != -1) {
     opts++
-    if(C == "l")                                     # -l <language>       Wiki language code. Default = en 
+    if(C == "l")                                     # -l <language>       Wiki language code. Default = en
       lang = verifyval(Optarg)
     if(C == "r")                                     # -r <offset>         Page offset number of multi-page requests
       pagenumber = verifyval(Optarg)
     if(C == "a")                                     # -a <action code>    Action to make (see API doc for names)
-      action = verifyval(Optarg)   
+      action = verifyval(Optarg)
     if(C == "p")                                     # -p <parameter>      Parameter=value string (see API doc for names)
-      parameter = verifyval(Optarg)   
+      parameter = verifyval(Optarg)
     if(C == "f")                                     # -f <filename>       Postdata filename (used with -a submitbotjob)
-      postfile = verifyval(Optarg)   
+      postfile = verifyval(Optarg)
     if(C == "j")                                     # -j <id>             Job ID (returned by -a submitbotjob)
       jobid = verifyval(Optarg)
     if(C == "d")                                      # -d                 Turn on debugging
@@ -157,15 +158,15 @@ function main() {
 
   parameter = encodeParams(parameter)
 
-  if(action == "searchurlfrompage") 
+  if(action == "searchurlfrompage")
     searchurlfrompage()
-  if(action == "searchpagefromurl") 
+  if(action == "searchpagefromurl")
     searchpagefromurl()
-  if(action == "searchurldata") 
+  if(action == "searchurldata")
     searchurldata()
-  if(action == "modifyurl") 
+  if(action == "modifyurl")
     modifyurl()
-  if(action == "submitbotjob") 
+  if(action == "submitbotjob")
     botjob(postfile)
   if(action == "getbotjob")
     getbotjob(jobid)
@@ -176,8 +177,8 @@ function help() {
    print ""
    print " iabapi - InternetArchiveBot API command-line interface\n"
    print "           -a     <action>         Action (see API doc): "
-   print "                                     searchpagefromurl"                
-   print "                                     searchurlfrompage"                
+   print "                                     searchpagefromurl"
+   print "                                     searchurlfrompage"
    print "                                     searchurldata"
    print "                                     modifyurl"
    print "                                     submitbotjob (use w/ -f not -p)"
@@ -211,12 +212,12 @@ function searchurlfrompage(  pn,oheader,wgetcommand,jqcommand) {
     print "Error: Parameter required: pageids"
     exit
   }
-  if( ! empty(pagenumber)) 
+  if( ! empty(pagenumber))
     pn = "offset=" pagenumber "&"
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchurlfrompage&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)  
-  jqcommand = Exe["jq"] " -r '.urls | map([.id, .url, .live_state, .archive, .snapshottime, .accesstime] | join(\" \")) | join(\"\\n\")' " 
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchurlfrompage&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
+  jqcommand = Exe["jq"] " -r '.urls | map([.id, .url, .live_state, .archive, .snapshottime, .accesstime] | join(\" \")) | join(\"\\n\")' "
   coreReader(wgetcommand, jqcommand, oheader)
 
 }
@@ -230,12 +231,12 @@ function searchpagefromurl(  pn,oheader,wgetcommand,jqcommand) {
     print "Error: Parameter required: url or urlid"
     exit
   }
-  if( ! empty(pagenumber)) 
+  if( ! empty(pagenumber))
     pn = "offset=" pagenumber "&"
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchpagefromurl&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)  
-  jqcommand = Exe["jq"] " -r '.pages [] |.page_title' | " Exe["awk"] " '{gsub(/_/,\" \", $0); print $0}'"  
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchpagefromurl&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
+  jqcommand = Exe["jq"] " -r '.pages [] |.page_title' | " Exe["awk"] " '{gsub(/_/,\" \", $0); print $0}'"
   coreReader(wgetcommand, jqcommand, oheader)
 
 }
@@ -250,12 +251,12 @@ function searchurldata(  pn,oheader,wgetcommand,jqcommand) {
     print "Error: Parameter required: urls, hasarchive, urlids, livestate, isarchived, reviewed"
     exit
   }
-  if( ! empty(pagenumber)) 
+  if( ! empty(pagenumber))
     pn = "offset=" pagenumber "&"
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchurldata&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)   
-  jqcommand = Exe["jq"] " -r '.urls | map([.id, .url, .live_state, .archive, .snapshottime, .accesstime] | join(\" \")) | join(\"\\n\")' " 
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote(pn "action=searchurldata&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
+  jqcommand = Exe["jq"] " -r '.urls | map([.id, .url, .live_state, .archive, .snapshottime, .accesstime] | join(\" \")) | join(\"\\n\")' "
   coreReader(wgetcommand, jqcommand, oheader)
 
 }
@@ -270,13 +271,13 @@ function modifyurl(  oheader,wgetcommand,op) {
     exit
   }
 
-  if( empty(Checksum) || empty(CSRF) ) 
+  if( empty(Checksum) || empty(CSRF) )
     getTokensFresh()
-  
+
   parameter = parameter "&token=" CSRF "&checksum=" Checksum
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote("action=modifyurl&" parameter ) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)   
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote("action=modifyurl&" parameter ) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
   op = getAPIpage(wgetcommand)
 
   if(sys2varPipe(op, Exe["jq"] " -r '. .result'") == "success") {
@@ -284,13 +285,13 @@ function modifyurl(  oheader,wgetcommand,op) {
     return
   }
   else {
-    if(rawJSON) 
+    if(rawJSON)
       print op
-    else 
+    else
       stdErrO("Error: Unable to post data.")
     return
   }
-  
+
 }
 
 #
@@ -299,7 +300,7 @@ function modifyurl(  oheader,wgetcommand,op) {
 function botjob(postfile,  p,oheader,wgetcommand,op) {
 
   if( empty(postfile) ) {
-    print "Error: Unknown -f postfile" 
+    print "Error: Unknown -f postfile"
     exit
   }
   if( ! exists(postfile) ) {
@@ -307,7 +308,7 @@ function botjob(postfile,  p,oheader,wgetcommand,op) {
     exit
   }
 
-  if( empty(Checksum) || empty(CSRF) ) 
+  if( empty(Checksum) || empty(CSRF) )
     getTokensFresh()
 
   p = readfile(postfile)
@@ -319,12 +320,12 @@ function botjob(postfile,  p,oheader,wgetcommand,op) {
   close(postfile ".wget")
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-file=" shquote(postfile ".wget") " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)   
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-file=" shquote(postfile ".wget") " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
 
   op = getAPIpage(wgetcommand)
 
   if(sys2varPipe(op, Exe["jq"] " -r '. .result'") == "success") {
-    if(rawJSON) 
+    if(rawJSON)
       print op
     else {
       print "success " sys2varPipe(op, Exe["jq"] " -r '. .id'")  # Print 'sucess 56878' where the number is a job ID
@@ -332,33 +333,33 @@ function botjob(postfile,  p,oheader,wgetcommand,op) {
     return
   }
   else {
-    if(rawJSON) 
+    if(rawJSON)
       print op
-    else 
+    else
       stdErrO("Error: Unable to submit job.")
     return
   }
-  
+
 }
 
-#   
-# Get bot job info.                    
 #
-#   Returns status only unless used with -w then full json                                               
+# Get bot job info.
+#
+#   Returns status only unless used with -w then full json                                             
 #
 function getbotjob(id,  oheader,wgetcommand,jqcommand) {
 
   if(parameter !~ /id[=]/) {
     print "Error: Parameter required: jobid"
     exit
-  }       
+  }
 
   oheader = strip(oauthHeader())
   wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data=" shquote("action=getbotjob&" parameter) " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(oheader) " -q -O- " shquote(iabotURL)
   jqcommand = Exe["jq"] " -r '. .status' "
   coreReader(wgetcommand, jqcommand, oheader)
 
-}         
+}
 
 #
 # Core routine to download read results, handle paging
@@ -367,7 +368,7 @@ function coreReader(wgetcommand, jqcommand, oheader,    op, jsonfile, orig,dest)
 
   if(empty(parameter)) {
     print "Error: parameter=value string required. See docs."
-    exit 
+    exit
   }
 
  # Get the first page of results starting at pagenumber (default: 1)
@@ -387,25 +388,25 @@ function coreReader(wgetcommand, jqcommand, oheader,    op, jsonfile, orig,dest)
   else
     print sys2varPipe(op, jqcommand)
 
- # Exit if it was the only page or single pagenumber request. But keep going if there is a "+" 
+ # Exit if it was the only page or single pagenumber request. But keep going if there is a "+"
 
-  if(empty(Continue) || (! empty(pagenumber) && empty(pageplus) ) ) 
+  if(empty(Continue) || (! empty(pagenumber) && empty(pageplus) ) )
     return
 
  # Display to stderr page number working on
 
-  if( ! empty(pagenumber) && ! empty(pageplus) ) 
+  if( ! empty(pagenumber) && ! empty(pageplus) )
     stdErr("Offset " Continue " ", "n")
   else
-    stdErr("Offset " Continue, "n") 
+    stdErr("Offset " Continue, "n")
 
   delayer() # be nice on large requests
 
- # Get rest of pages 
+ # Get rest of pages
 
   while( ! empty(Continue) ) {
 
-   # Build proper "offset=<string>" 
+   # Build proper "offset=<string>"
     if(match(wgetcommand, /[-][-]post[-]data[=]'offset[=][^&]*[^&]/, dest)) {
       orig = dest[0]
       gsub(/offset[=][^$]*$/, "offset=" Continue, dest[0])
@@ -417,9 +418,9 @@ function coreReader(wgetcommand, jqcommand, oheader,    op, jsonfile, orig,dest)
     }
 
    # Freshen header
-    if(index(wgetcommand, oheader) > 0) 
+    if(index(wgetcommand, oheader) > 0)
       wgetcommand = freshHeader(wgetcommand)
-      
+
     op = getAPIpage(wgetcommand)
 
     if(rawJSON)
@@ -428,7 +429,7 @@ function coreReader(wgetcommand, jqcommand, oheader,    op, jsonfile, orig,dest)
       print sys2varPipe(op, jqcommand)
 
     if(! empty(Continue) ) {
-      stdErr("Offset " Continue " ", "n") 
+      stdErr("Offset " Continue " ", "n")
       delayer() # be nice on 1000-record requests
     }
     else {
@@ -450,18 +451,18 @@ function getAPIpage(command,   op, i,j,k) {
   Continue = ""
   gsub(/\\n/,"\n",command)
 
-  if(debug == 1) 
+  if(debug == 1)
     print "\nCOMMAND = " command
 
   op = sys2var("timeout 40s " freshHeader(command))
 
- # Try up to j times 
+ # Try up to j times
   j = 5
   k = j + 1
   for(i = 1; i < k; i++) {
     if(op ~ /csrf["][ ]*[:][ ]*["][^}]*[}]$/) break
     if(i == j && op !~ /csrf["][ ]*[:][ ]*["][^}]*[}]$/) {
-      stdErr(op) 
+      stdErr(op)
       stdErrO("Error: JSON or auth problem. Aborted. ")
       bell()
       exit
@@ -479,7 +480,7 @@ function getAPIpage(command,   op, i,j,k) {
     }
   }
 
-  Continue = getContinue(op)  
+  Continue = getContinue(op)
   getTokensJSON(op)
 
   return op
@@ -515,7 +516,7 @@ function getAPIpageTimeout(command, op, errmsg, loc,   i, timo) {
       command = freshTokens(freshHeader(command))
       op = sys2var(command)
 
-      if(debug == 1) 
+      if(debug == 1)
         print "\nCOMMAND = " command
     }
   }
@@ -535,16 +536,6 @@ function getContinue(s,  dest) {
     return strip(dest[0])
   }
   return ""
-}
-
-
-#
-# Generate OAuth header
-#
-function oauthHeader(  command, sp) {
-  command = Exe["phpGenerateHeader"] " " shquote(consumerKey) " " shquote(consumerSecret) " " shquote(accessKey) " " shquote(accessSecret) " " shquote(identifyURL) 
-  sp = sys2var(command)
-  return sp  
 }
 
 #
@@ -575,13 +566,13 @@ function freshTokens(command  ,s, dest) {
     gsub(/^[&]token[=]/, "", s)
     s = "&token=" CSRF
     command = subs(dest[0], s, command)
-    
+
     match(command, /[&]checksum[=][^&']*[^&']/, dest)
     s = dest[0]
     gsub(/^[&]checksum[=]/, "", s)
     s = "&checksum=" Checksum
     command = subs(dest[0], s, command)
-    
+
   }
 
   return command
@@ -594,8 +585,8 @@ function freshTokens(command  ,s, dest) {
 function getTokensFresh() {
 
   oheader = strip(oauthHeader())
-  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data='action=noaction' --header='Content-Type: application/x-www-form-urlencoded' --header='" oheader "' -q -O- '" iabotURL "'"  
-  jqcommand = Exe["jq"] " -r '.arguments | map([.checksum, .csrf] | join(\" \")) | join(\"\\n\")' " 
+  wgetcommand = TIMEOUT Exe["wget"] Wget_opts db " --post-data='action=noaction' --header='Content-Type: application/x-www-form-urlencoded' --header='" oheader "' -q -O- '" iabotURL "'"
+  jqcommand = Exe["jq"] " -r '.arguments | map([.checksum, .csrf] | join(\" \")) | join(\"\\n\")' "
 
   op = getAPIpage(wgetcommand)
 
@@ -605,7 +596,7 @@ function getTokensFresh() {
 }
 
 #
-# Get Checksum and CSRF from existing JSON 
+# Get Checksum and CSRF from existing JSON
 #
 function getTokensJSON(op  ,jqcommand, jsonfile) {
 
@@ -617,48 +608,17 @@ function getTokensJSON(op  ,jqcommand, jsonfile) {
 }
 
 #
-# Log into MediaWiki
-#
-function loginMediaWiki(  command, sp, payload) {
-
-  return 1  # informed by Cyberpower678 this is not needed since the API handles MW login
-
-  command = TIMEOUT Exe["wget"] Wget_opts db " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(strip(oauthHeader())) " -q -O- " shquote(identifyURL) 
-  sp = sys2var(command)
-  payload = decryptIABot(sp)
-  if( ! empty(payload) )
-    return 1
-  else
-    return 0  
-}
-
-#
-# Decrypt payload
-#
-function decryptIABot(s,   command, sp) {
-  if( ! empty(s) > 0) {
-    command = Exe["phpDecodePayload"] " " shquote(consumerSecret) " " shquote(s) 
-    sp = sys2var(command)
-    if(sp ~ /Invalid identify response/)  # error by MWOAuthDecodePayload.php
-      return ""
-    return sp
-  }
-  return ""
-}
-
-
-#
-# URL encode paramters but not the separating '&' or '=' or '\n', and only params that use string values 
+# URL encode paramters but not the separating '&' or '=' or '\n', and only params that use string values
 #
 function encodeParams(s ,c,i,fields,sep) {
 
   c = patsplit(s, fields, /[{][&][}]/, sep)
-  if(c == 0) 
+  if(c == 0)
     s = encodeParamsHelper(s)
   else {
-    while(i++ < c) 
+    while(i++ < c)
       sep[i] = encodeParamsHelper(sep[i])
-    if(! empty(sep[0]) ) 
+    if(! empty(sep[0]) )
       sep[0] = encodeParamsHelper(sep[0])
     s = unpatsplit(fields, sep)
   }
@@ -683,11 +643,11 @@ function encodeParamsHelper(s ,j,fieldnew,a,dest) {
 
 # [____________________ UTILITIES ________________________________________________________________]
 
-# 
-# Run a system command and store result in a variable     
+#
+# Run a system command and store result in a variable
 #   eg. googlepage = sys2var("wget -q -O- http://google.com")
-# Supports pipes inside command string. Stderr is sent to null.             
-# If command fails (errno) return null               
+# Supports pipes inside command string. Stderr is sent to null.
+# If command fails (errno) return null
 #
 function sys2var(command        ,fish, scale, ship) {
 
@@ -709,7 +669,7 @@ function sys2var(command        ,fish, scale, ship) {
 function sys2varPipe(data, command,   fish, scale, ship) {
 
          print data |& command
-         close(command, "to")   
+         close(command, "to")
 
          while ( (command |& getline fish) > 0 ) {
              if ( ++scale == 1 )
@@ -730,7 +690,7 @@ function urlencodeawk(str,  c, len, res, i, ord) {
 
         for (i = 0; i <= 255; i++)
                 ord[sprintf("%c", i)] = i
-        len = length(str)             
+        len = length(str)
         res = ""
         for (i = 1; i <= len; i++) {
                 c = substr(str, i, 1);
@@ -742,88 +702,109 @@ function urlencodeawk(str,  c, len, res, i, ord) {
         return res
 }
 
-#  
-# Strip leading/trailing whitespace                 
 #
-function strip(str, opt) {
-       return gensub(/^[[:space:]]+|[[:space:]]+$/,"","g",str)
+# strip - strip leading/trailing whitespace
+#
+#   . faster than gsub() or gensub() methods eg.
+#        gsub(/^[[:space:]]+|[[:space:]]+$/,"",s)
+#        gensub(/^[[:space:]]+|[[:space:]]+$/,"","g",s)
+#
+#   Credit: https://github.com/dubiousjim/awkenough by Jim Pryor 2012
+#
+function strip(str) {
+    if (match(str, /[^ \t\n].*[^ \t\n]/))
+        return substr(str, RSTART, RLENGTH)
+    else if (match(str, /[^ \t\n]/))
+        return substr(str, RSTART, 1)
+    else
+        return ""
 }
 
 #
-# Return 0 if string is 0-length      
+# Return 0 if string is 0-length
 #
-function empty(s) {                
+function empty(s) {
   if(length(s) == 0)
     return 1
   return 0
-}                 
+}
 
-# A helper function to subs()
-function insert_subs(str,spos,len,newstr) {
-        return substr(str,1,spos-1) newstr substr(str,spos+len)
-}  
 
-# subs is like sub, except that no regular expression handling is done
-function subs(pat,rep,str,        t) {
-        if (str == "") return
-        if(t = index(str,pat)) {
-          return insert_subs(str,t,length(pat),rep)
-        }
-        else {
-          return str
-        }
-#       return (t = index(str,pat)) ? insert_subs(str,t,length(pat),rep) : str
-}                                  
+#
+# subs - like sub() but literal non-regex
+#
+#   Example:
+#      s = "*field"
+#      print subs("*", "-", s)  #=> -field
+#
+#   Credit: adapted from lsub() by Daniel Mills https://github.com/e36freak/awk-libs
+#
+function subs(pat, rep, str,    len, i) {
 
-# gsubs is like gsub, except that no regular expression handling is done
-function gsubs(pat,rep,str) {
-        while( countsubstring(str,pat) > 0) {
-          str = subs(pat,rep,str)
-        }
-        return str        
+  if (!length(str))
+    return
+
+  # get the length of pat, in order to know how much of the string to remove
+  if (!(len = length(pat)))
+    return str
+
+  # substitute str for rep
+  if (i = index(str, pat))
+    str = substr(str, 1, i - 1) rep substr(str, i + len)
+
+  # return the result
+  return str
 }
 
 #
-# Reverse a patsplit()
+# gsubs - like gsub() but literal non-regex
 #
-function unpatsplit(field,sep,   c,o) {
+#   Example:
+#      s = "****field****"
+#      print gsubs("*", "-", s)  #=> ----field----
+#
+#   Credit: Adapted from glsub() by Daniel Mills https://github.com/e36freak/awk-libs
+#
+function gsubs(pat, rep, str,    out, len, i, a, l) {
 
+  if (!length(str))
+    return
+
+  # get the length of pat to know how much of the string to remove
+  # if empty return original str
+  if (!(len = length(pat)))
+    return str
+
+  # loop while 'pat' is in 'str'
+  while (i = index(str, pat)) {
+    # append everything up to the search pattern, and the replacement, to out
+    out = out substr(str, 1, i - 1) rep
+    # remove everything up to and including the first instance of pat from str
+    str = substr(str, i + len)
+  }
+
+  # append whatever is left in str to out and return
+  return out str
+}
+
+#
+# unpatsplit - join arrays created by patsplit()
+#
+function unpatsplit(field,sep,   c,o, debug) {
+
+  debug = 0
   if(length(field) > length(sep)) return
 
   o = sep[0]
-  c = 1
-  while(c < length(field) + 1) {
-#    print "field[" c "] = " field[c]
-#    print "sep[" c "] = " sep[c]
+  for(c = 1; c < length(field) + 1; c++) {
+    if(debug) {
+      print "field[" c "] = " field[c]
+      print "sep[" c "] = " sep[c]
+    }
     o = o field[c] sep[c]
-    c++
   }
-
-  return o                
+  return o
 }
-
-# 
-# countsubstring
-#   Returns number of occurances of pattern in str.
-#   Pattern treated as a literal string, regex char safe
-# 
-#   Example: print countsubstring("[do&d?run*d!run>run*", "run*")
-#            2
-# 
-#   To count substring using regex use gsub ie. total += gsub("[.]","",str)
-#
-function countsubstring(str, pat,    len, i, c) {
-  c = 0
-  if( ! (len = length(pat) ) ) {
-    return 0
-  }
-  while(i = index(str, pat)) {
-    str = substr(str, i + len)
-    c++
-  }
-  return c
-}
-
 
 #
 # Make string safe for shell
@@ -832,24 +813,29 @@ function countsubstring(str, pat,    len, i, c) {
 #
 function shquote(str,  safe) {
         safe = str
-        gsub(/'/, "'\\''", safe)  
+        gsub(/'/, "'\\''", safe)
         gsub(/’/, "'\\’'", safe)
-        return "'" safe "'"         
+        return "'" safe "'"
 }
 
 #
-# Remove file
+# removefile - delete a file
 #
-function removefile(str) {
-
+#   . rm options can be passed in 'opts'
+#
+#   Requirement: Exe["rm"]
+#
+function removefile(str,opts) {
+      close(str)
       if( checkexists(str) )
-        sys2var( Exe["rm"] " -- " shquote(str) )
+        sys2var( Exe["rm"] " " opts " -- " shquote(str) )
       if( checkexists(str) ) {
-        prnt("Error: unable to delete " str ", aborting.")
-        exit          
-      }              
+        stdErr("Error: unable to delete " str ", aborting.")
+        exit
+      }
       system("") # Flush buffer
-}      
+}
+
 
 #
 # Print some dots
@@ -857,24 +843,62 @@ function removefile(str) {
 function delayer() {
   stdErr(".","n")
   sleep(0)
-  stdErr(".","n") 
+  stdErr(".","n")
   sleep(0)
-  stdErr(".") 
+  stdErr(".")
 }
 
 #
-# Ring da bell - disabled for farotbot, add one if desired
+# bell - ring bell
 #
-function bell() {
-      return
-      # system("/home/adminuser/scripts/bell")
-      # sleep(1)
+#   . Exe["bell"] defined in BEGIN{} section of this file using full path/filenames
+#     eg.  Exe["bell"] = "/usr/bin/play -q /home/adminuser/scripts/chord.wav"
+#
+function bell(  a,i,ok) {
+
+  c = split(Exe["bell"], a, " ")
+
+  if(!checkexists(a[1])) return
+
+  for(i = 2; i <= c; i++) {
+    if(tolower(a[i]) ~ /[.]wav|[.]mp3|[.]ogg/) {
+      if(!checkexists(a[i]))
+        continue
+      else {
+        ok = 1
+        break
+      }
+    }
+  }
+  if(ok) sys2var(Exe["bell"])
 }
 
 
 #
-# Check for file existence. Return 1 if exists, 0 otherwise.                  
-#  Requires GNU Awk: @load "filefuncs"               
+# checkexists - check file or directory exists.
+#
+#   . action = "exit" or "check" (default: check)
+#   . return 1 if exists, or exit if action = exit
+#   . requirement: @load "filefuncs"
+#
+function checkexists(file, program, action) {
+  if( ! exists(file) ) {
+    if( action == "exit" ) {
+      stdErr(program ": Unable to find/open " file)
+      print program ": Unable to find/open " file
+      system("")
+      exit
+    }
+    else
+      return 0
+  }
+  else
+    return 1
+}
+
+#
+# Check for file existence. Return 1 if exists, 0 otherwise.
+#  Requires GNU Awk: @load "filefuncs"
 #
 function exists(name    ,fd) {
     if ( stat(name, fd) == -1)
@@ -885,15 +909,15 @@ function exists(name    ,fd) {
 
 #
 # Print to /dev/stderr
-#  if flag = "n" then no newline                     
+#  if flag = "n" then no newline
 #
 function stdErr(s, flag) {
   if(flag == "n")
     printf("%s",s) > "/dev/stderr"
-  else  
+  else
     printf("%s\n",s) > "/dev/stderr"
   close("/dev/stderr")
-}              
+}
 
 function stdErrO(s) {
   if(stdOut == 1)
@@ -902,8 +926,8 @@ function stdErrO(s) {
     stdErr(s)
 }
 
-# 
-# Verify any argument has valid value                
+#
+# Verify any argument has valid value
 #
 function verifyval(val) {
   if(val == "" || substr(val,1,1) ~/^[-]/) {
@@ -911,6 +935,323 @@ function verifyval(val) {
     exit
   }
   return val
-}              
+}
 
+#
+# getopt - command-line parser
+#
+#   . define these globals before getopt() is called:
+#        Optind = Opterr = 1
+#
+#   Credit: GNU awk (/usr/local/share/awk/getopt.awk)
+#
+function getopt(argc, argv, options,    thisopt, i) {
+
+    if (length(options) == 0)    # no options given
+        return -1
+
+    if (argv[Optind] == "--") {  # all done
+        Optind++
+        _opti = 0
+        return -1
+    } else if (argv[Optind] !~ /^-[^:[:space:]]/) {
+        _opti = 0
+        return -1
+    }
+    if (_opti == 0)
+        _opti = 2
+    thisopt = substr(argv[Optind], _opti, 1)
+    Optopt = thisopt
+    i = index(options, thisopt)
+    if (i == 0) {
+        if (Opterr)
+            printf("%c -- invalid option\n", thisopt) > "/dev/stderr"
+        if (_opti >= length(argv[Optind])) {
+            Optind++
+            _opti = 0
+        } else
+            _opti++
+        return "?"
+    }
+    if (substr(options, i + 1, 1) == ":") {
+        # get option argument
+        if (length(substr(argv[Optind], _opti + 1)) > 0)
+            Optarg = substr(argv[Optind], _opti + 1)
+        else
+            Optarg = argv[++Optind]
+        _opti = 0
+    } else
+        Optarg = ""
+    if (_opti == 0 || _opti >= length(argv[Optind])) {
+        Optind++
+        _opti = 0
+    } else
+        _opti++
+    return thisopt
+}
+
+#
+# sleep - sleep seconds including sub-seconds
+#
+#   Requirement: Exe["sleep"]
+#
+function sleep(seconds) {
+  if(isafraction(seconds)) {
+    if(seconds > 0)
+      sys2var( Exe["sleep"] " " shquote(seconds) )
+  }
+}
+
+#
+# isanumber - return 1 if str is a positive whole number or 0
+#
+#   Example:
+#      "1234" == 1 / "0fr123" == 0 / 1.1 == 0 / -1 == 0 / 0 == 1
+#
+function isanumber(str,    safe,i) {
+
+  if(length(str) == 0) return 0
+  safe = str
+  while( i++ < length(safe) ) {
+    if( substr(safe,i,1) !~ /[0-9]/ )
+      return 0
+  }
+  return 1
+}
+
+#
+# isafraction --- return 1 if str is a positive whole or fractional number
+#
+#   Example:
+#      "1234" == 1 / "0fr123" == 0 / 1.1 == 1 / -1 == 0 / 0 == 1
+#
+function isafraction(str,    safe) {
+  if(length(str) == 0) return 0
+  safe = str
+  sub(/[.]/,"",safe)
+  return isanumber(safe)
+}
+
+#
+# readfile - same as @include "readfile"
+#
+#   . leaves an extra trailing \n just like with the @include readfile
+#
+#   Credit: https://www.gnu.org/software/gawk/manual/html_node/Readfile-Function.html by by Denis Shirokov
+#
+function readfile(file,     tmp, save_rs) {
+    save_rs = RS
+    RS = "^$"
+    getline tmp < file
+    close(file)
+    RS = save_rs
+    return tmp
+}
+
+
+# [____________________ OAUTH ________________________________________________________________]
+
+
+#
+# oauthHeader - generate OAuth header
+#
+function oauthHeader(   sp) {
+  sp = MWOAuthGenerateHeader(consumerKey,consumerSecret,accessKey,accessSecret,identifyURL)
+  if(empty(sp))
+    stdErr("iabget.awk oauthHeader(): unable to determine header")
+  return sp
+}
+
+#
+# MWOAuthGenerateHeader.php - generate OAuth header
+#
+#  Source: https://meta.wikimedia.org/wiki/InternetArchiveBot/API#Helper_scripts_to_make_OAuth_easier
+#  Credit: User:Cyberpower678 May 2017
+#  Conversion to awk-php function User:GreenC May 2018
+#
+#  . return empty if params not set
+#  . does not support RSA keys
+#
+function MWOAuthGenerateHeader(consumerKey, consumerSecret, accessKey, accessSecret, indentifyURL,   s) {
+
+     if(empty(consumerKey) || empty(consumerSecret) || empty(accessKey) || empty(accessSecret) || empty(indentifyURL))
+       return ""
+
+     s = "\n\
+     define( 'CONSUMERKEY', '" consumerKey "' ); \n\
+     define( 'CONSUMERSECRET', '" consumerSecret "' ); \n\
+     define( 'ACCESSTOKEN', '" accessKey "' ); \n\
+     define( 'ACCESSSECRET', '" accessSecret "' ); \n\
+     \n\
+     echo generateOAuthHeader( 'GET', '" indentifyURL "' ); \n\
+     \n\
+     function generateOAuthHeader( $method = 'GET', $url ) { \n\
+       $headerArr = [ \n\
+         /* OAuth information */ \n\
+         'oauth_consumer_key'     => CONSUMERKEY, \n\
+         'oauth_token'            => ACCESSTOKEN, \n\
+         'oauth_version'          => '1.0', \n\
+         'oauth_nonce'            => md5( microtime() . mt_rand() ), \n\
+         'oauth_timestamp'        => time(), \n\
+         \n\
+                /* We're using secret key signatures here. */ \n\
+                'oauth_signature_method' => 'HMAC-SHA1', \n\
+        ]; \n\
+        $signature = generateSignature( $method, $url, $headerArr ); \n\
+        $headerArr['oauth_signature'] = $signature; \n\
+        \n\
+        $header = []; \n\
+        foreach( $headerArr as $k => $v ) { \n\
+          $header[] = rawurlencode( $k ) . '=\"' . rawurlencode( $v ) . '\"'; \n\
+        } \n\
+        $header = 'Authorization: OAuth ' . join( ', ', $header ); \n\
+        unset( $headerArr ); \n\
+        \n\
+        return $header; \n\
+      } \n\
+      \n\
+      function generateSignature( $method, $url, $params = [] ) { \n\
+        $parts = parse_url( $url ); \n\
+        \n\
+        /* We need to normalize the endpoint URL */ \n\
+        $scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'http'; \n\
+        $host = isset( $parts['host'] ) ? $parts['host'] : ''; \n\
+        $port = isset( $parts['port'] ) ? $parts['port'] : ( $scheme == 'https' ? '443' : '80' ); \n\
+        $path = isset( $parts['path'] ) ? $parts['path'] : ''; \n\
+        if( ( $scheme == 'https' && $port != '443' ) || \n\
+          ( $scheme == 'http' && $port != '80' ) \n\
+        ) { \n\
+                /* Only include the port if it's not the default */ \n\
+                $host = \"$host:$port\"; \n\
+        } \n\
+        \n\
+        /* Also the parameters */ \n\
+        $pairs = []; \n\
+        parse_str( isset( $parts['query'] ) ? $parts['query'] : '', $query ); \n\
+        $query += $params; \n\
+        unset( $query['oauth_signature'] ); \n\
+        if( $query ) { \n\
+          $query = array_combine( \n\
+            /* rawurlencode follows RFC 3986 since PHP 5.3 */ \n\
+            array_map( 'rawurlencode', array_keys( $query ) ), \n\
+            array_map( 'rawurlencode', array_values( $query ) ) \n\
+          ); \n\
+          ksort( $query, SORT_STRING ); \n\
+          foreach( $query as $k => $v ) { \n\
+            $pairs[] = \"$k=$v\"; \n\
+          } \n\
+        } \n\
+        \n\
+        $toSign = rawurlencode( strtoupper( $method ) ) . '&' . \n\
+                  rawurlencode( \"$scheme://$host$path\" ) . '&' . \n\
+                  rawurlencode( join( '&', $pairs ) ); \n\
+        \n\
+        $key = rawurlencode( CONSUMERSECRET ) . '&' . rawurlencode( ACCESSSECRET ); \n\
+        \n\
+        return base64_encode( hash_hmac( 'sha1', $toSign, $key, true ) ); \n\
+      }"
+
+     return sys2var(Exe["php"] " -r " shquote(s) )
+     # to view script:
+     # print s
+
+}
+
+#
+# Log into MediaWiki
+#
+function loginMediaWiki(  command, sp, payload) {
+
+  return 1  # informed by Cyberpower678 this is not needed since the API handles MW login
+
+  command = TIMEOUT Exe["wget"] Wget_opts db " --header=" shquote("Content-Type: application/x-www-form-urlencoded") " --header=" shquote(strip(oauthHeader())) " -q -O- " shquote(identifyURL)
+  sp = sys2var(command)
+  payload = decryptIABot(sp)
+  if( ! empty(payload) )
+    return 1
+  else
+    return 0
+}
+
+#
+# decryptIABot - decrypt payload
+#
+function decryptIABot(s,   command, sp) {
+  if( ! empty(s) > 0) {
+    sp = MWOAuthDecodePayload(consumerSecret, s)
+    if(sp ~ /Invalid identify response/)  # error by MWOAuthDecodePayload.php
+      return ""
+    return sp
+  }
+  return ""
+}
+
+#
+# MWOAuthDecodePayload.php script
+#
+# Source: https://meta.wikimedia.org/wiki/InternetArchiveBot/API#Helper_scripts_to_make_OAuth_easier
+# Credit: User:Cyberpower678 May 2017
+# Conversion to awk-php function User:GreenC May 2018
+#
+# Notes by CP:
+#  When the /identify request is successful, it will return a payload.
+#  That payload has numerous elements to decode and validate.
+#  And requires your Consumer secret to validate. The tool API passes back the payload as well since it can't do the validation without the consumer secret,
+#  and that would be plain reckless to ask for.
+#  If successful, it will return a JSON with your MW account details. If it fails, it will echo back an error message instead.
+#  I copied it from my OAuth engine (InternetArchiveBot)
+#
+function MWOAuthDecodePayload(consumerSecret,payload,   s) {
+
+     if(empty(consumerSecret) || empty(payload))
+       return ""
+
+     s = "$argv[1] = '" consumerSecret "'; \n\
+     $argv[2] = '" payload "'; \n\
+     define( 'CONSUMERSECRET', $argv[1] ); \n\
+     \n\
+     /* There are three fields in the response */ \n\
+     $fields = explode( '.', $argv[2] ); \n\
+     if( count( $fields ) !== 3 ) { \n\
+       $error = 'Invalid identify response: '; \n\
+       goto loginerror; \n\
+     } \n\
+     \n \
+     /* Validate the header. MWOAuth always returns alg \"HS256\". */ \n\
+     $header = base64_decode( strtr( $fields[0], '-_', '+/' ), true ); \n\
+     if( $header !== false ) { \n\
+       $header = json_decode( $header ); \n\
+     } \n\
+     if( !is_object( $header ) || $header->typ !== 'JWT' || $header->alg !== 'HS256' ) { \n\
+       $error = 'Invalid header in identify response: '; \n\
+       goto loginerror; \n\
+     } \n\
+     \n\
+     /* Verify the signature */ \n\
+     $sig = base64_decode( strtr( $fields[2], '-_', '+/' ), true ); \n\
+     $check = hash_hmac( 'sha256', $fields[0] . '.' . $fields[1], CONSUMERSECRET, true ); \n\
+     if( $sig !== $check ) { \n\
+       $error = 'JWT signature validation failed: '; \n\
+       goto loginerror; \n\
+     } \n\
+     \n\
+     /* Decode the payload */ \n\
+     $payload = base64_decode( strtr( $fields[1], '-_', '+/' ), true ); \n\
+     if( $payload !== false ) { \n\
+       $payload = json_decode( $payload ); \n\
+     } \n\
+     if( !is_object( $payload ) ) { \n\
+       $error = 'Invalid payload in identify response: '; \n\
+       goto loginerror; \n\
+     } \n\
+     \n\
+     die( json_encode( $payload ) ); \n\
+     \n\
+     loginerror: \n\
+     die( $error );"
+
+     return sys2var(Exe["php"] " -r " shquote(s) )
+     # to view script:
+     # print s
+}
 

@@ -2,7 +2,7 @@
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2017 by User:Green Cardamom (at en.wikipedia.org)
+# Copyright (c) 2017-2018 by User:GreenC (at en.wikipedia.org)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@
 
 BEGIN {
 
-  Email           = ""                                 # For notifying of errors. Set blank to disable send.
+  Email           = ""                                 # For notifying of errors. Set blank to disable.
   Home            = "/data/project/farotbot/"          # Home directory of farotbot.awk with trailing slash
   BinDir          = Home "bin/"
   DataDir         = Home "data/"
@@ -284,8 +284,11 @@ function jobcompleted(  command,a,msg,json,op) {
         close(a[2] "json.completed")
         return 1
       }
-      else
+      else {
         msg = op
+        if(empty(msg))
+          msg = "no getbotjob"
+      }
     }
     else
       msg = "no id"
